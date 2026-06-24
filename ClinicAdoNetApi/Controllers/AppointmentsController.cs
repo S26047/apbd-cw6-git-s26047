@@ -263,7 +263,59 @@ public class AppointmentsController : ControllerBase
             });
         }
         
-        return Ok("All validations passed");
+        const string insertSql = @"
+            INSERT INTO dbo.Appointments
+            (
+                IdPatient,
+                IdDoctor,
+                AppointmentDate,
+                Status,
+                Reason,
+                CreatedAt
+            )
+            VALUES
+            (
+                @IdPatient,
+                @IdDoctor,
+                @AppointmentDate,
+                'Scheduled',
+                @Reason,
+                GETDATE()
+            );
+
+            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+        
+        await using var insertCommand =
+            new SqlCommand(insertSql, connection);
+        
+        insertCommand.Parameters.Add(
+            "@IdPatient",
+            SqlDbType.Int).Value = request.IdPatient;
+
+        insertCommand.Parameters.Add(
+            "@IdDoctor",
+            SqlDbType.Int).Value = request.IdDoctor;
+
+        insertCommand.Parameters.Add(
+            "@AppointmentDate",
+            SqlDbType.DateTime).Value = request.AppointmentDate;
+
+        insertCommand.Parameters.Add(
+            "@Reason",
+            SqlDbType.NVarChar,
+            300).Value = request.Reason;
+        
+        var newAppointmentId =
+            (int)await insertCommand.ExecuteScalarAsync()!;
+        
+        return CreatedAtAction(
+            nameof(GetById),
+            new { idAppointment = newAppointmentId },
+            new
+            {
+                IdAppointment = newAppointmentId,
+                Message = "Appointment created successfully"
+            });
         
     }
 
