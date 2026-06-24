@@ -6,9 +6,19 @@ namespace ClinicAdoNetApi.Controllers;
 [Route("api/[controller]")]
 public class AppointmentsController : ControllerBase
 {
+    private readonly IConfiguration _configuration;
+
+    public AppointmentsController(IConfiguration configuration)
+    {
+        _configuration = configuration;
+    }
+
     [HttpGet]
     public IActionResult Get()
     {
-        return Ok("Appointments endpoint works");
+        var connectionString =
+            _configuration.GetConnectionString("DefaultConnection");
+
+        return Ok(connectionString);
     }
 }
