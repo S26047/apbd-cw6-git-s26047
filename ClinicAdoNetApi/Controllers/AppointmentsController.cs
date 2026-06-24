@@ -318,6 +318,125 @@ public class AppointmentsController : ControllerBase
             });
         
     }
+    
+    [HttpPut("{idAppointment}")]
+    public async Task<IActionResult> Update(
+        int idAppointment,
+        UpdateAppointmentRequestDto request)
+    {
+        var allowedStatuses = new[]
+        {
+            "Scheduled",
+            "Completed",
+            "Cancelled"
+        };
 
+        if (!allowedStatuses.Contains(request.Status))
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Invalid appointment status"
+            });
+        }
+        
+        var connectionString =
+            _configuration.GetConnectionString("DefaultConnection");
+
+        await using var connection =
+            new SqlConnection(connectionString);
+
+        await connection.OpenAsync();
+        
+        const string appointmentSql = @"
+            SELECT Status
+            FROM dbo.Appointments
+            WHERE IdAppointment = @IdAppointment";
+        
+        await using var appointmentCommand =
+            new SqlCommand(appointmentSql, connection);
+
+        appointmentCommand.Parameters.Add(
+            "@IdAppointment",
+            SqlDbType.Int).Value = idAppointment;
+        
+        var currentStatus =
+            await appointmentCommand.ExecuteScalarAsync();
+        
+        if (currentStatus == null)
+        {
+            return NotFound(new ErrorResponseDto
+            {
+                Message = "Appointment not found"
+            });
+        }
+        
+        if (currentStatus.ToString() == "Completed")
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Completed appointments cannot be modified"
+            });
+        }
+
+        return Ok("Appointment can be updated");
+    }
+
+    [HttpDelete("{idAppointment}")]
+    public async Task<IActionResult> Delete(int idAppointment)
+    {
+        var connectionString =
+            _configuration.GetConnectionString("DefaultConnection");
+
+        await using var connection =
+            new SqlConnection(connectionString);
+
+        await connection.OpenAsync();
+
+        const string checkSql = @"
+SELECT Status
+FROM dbo.Appointments
+WHERE IdAppointment = @IdAppointment";
+
+        await using var checkCommand =
+            new SqlCommand(checkSql, connection);
+
+        checkCommand.Parameters.Add(
+            "@IdAppointment",
+            SqlDbType.Int).Value = idAppointment;
+
+        var statusObj = await checkCommand.ExecuteScalarAsync();
+
+        if (statusObj == null)
+        {
+            return NotFound(new ErrorResponseDto
+            {
+                Message = "Appointment not found"
+            });
+        }
+
+        if (statusObj.ToString() == "Completed")
+        {
+            return Conflict(new ErrorResponseDto
+            {
+                Message = "Completed appointments cannot be deleted"
+            });
+        }
+
+        const string deleteSql = @"
+            DELETE FROM dbo.Appointments
+            WHERE IdAppointment = @IdAppointment";
+
+        await using var deleteCommand =
+            new SqlCommand(deleteSql, connection);
+
+        deleteCommand.Parameters.Add(
+            "@IdAppointment",
+            SqlDbType.Int).Value = idAppointment;
+
+        await deleteCommand.ExecuteNonQueryAsync();
+
+        return NoContent();
+
+    }
 
 }
