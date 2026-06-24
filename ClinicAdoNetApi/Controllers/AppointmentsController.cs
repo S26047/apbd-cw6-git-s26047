@@ -152,6 +152,120 @@ public class AppointmentsController : ControllerBase
         return Ok(appointment);
     }
     
+    [HttpPost]
+    public async Task<IActionResult> Create(
+        CreateAppointmentRequestDto request)
+    {
+        if (request.AppointmentDate <= DateTime.Now)
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Appointment date cannot be in the past"
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Reason is required"
+            });
+        }
+
+        if (request.Reason.Length > 250)
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Reason cannot exceed 250 characters"
+            });
+        }
+
+        var connectionString =
+            _configuration.GetConnectionString("DefaultConnection");
+
+        await using var connection =
+            new SqlConnection(connectionString);
+
+        await connection.OpenAsync();
+        
+        const string patientSql = @"
+            SELECT COUNT(*)
+            FROM dbo.Patients
+            WHERE IdPatient = @IdPatient
+              AND IsActive = 1";
+        
+        await using var patientCommand =
+            new SqlCommand(patientSql, connection);
+
+        patientCommand.Parameters.Add(
+            "@IdPatient",
+            SqlDbType.Int).Value = request.IdPatient;
+        
+        var patientExists =
+            (int)await patientCommand.ExecuteScalarAsync()!;
+
+        if (patientExists == 0)
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Patient does not exist or is inactive"
+            });
+        }
+        
+        const string doctorSql = @"
+            SELECT COUNT(*)
+            FROM dbo.Doctors
+            WHERE IdDoctor = @IdDoctor";
+        
+        await using var doctorCommand =
+            new SqlCommand(doctorSql, connection);
+
+        doctorCommand.Parameters.Add(
+            "@IdDoctor",
+            SqlDbType.Int).Value = request.IdDoctor;
+        
+        var doctorExists =
+            (int)await doctorCommand.ExecuteScalarAsync()!;
+
+        if (doctorExists == 0)
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Doctor does not exist"
+            });
+        }
+        
+        const string conflictSql = @"
+            SELECT COUNT(*)
+            FROM dbo.Appointments
+            WHERE IdDoctor = @IdDoctor
+              AND AppointmentDate = @AppointmentDate";
+        
+        await using var conflictCommand =
+            new SqlCommand(conflictSql, connection);
+
+        conflictCommand.Parameters.Add(
+            "@IdDoctor",
+            SqlDbType.Int).Value = request.IdDoctor;
+
+        conflictCommand.Parameters.Add(
+            "@AppointmentDate",
+            SqlDbType.DateTime).Value = request.AppointmentDate;
+        
+        var conflicts =
+            (int)await conflictCommand.ExecuteScalarAsync()!;
+
+        if (conflicts > 0)
+        {
+            return BadRequest(new ErrorResponseDto
+            {
+                Message = "Doctor already has an appointment at this time"
+            });
+        }
+        
+        return Ok("All validations passed");
+        
+    }
 
 
 }
