@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using ClinicAdoNetApi.DTOs;
+using System.Data;
 
 namespace ClinicAdoNetApi.Controllers;
 
@@ -16,7 +17,10 @@ public class AppointmentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get()
+    [HttpGet]
+    public async Task<IActionResult> Get(
+        [FromQuery] string? status,
+        [FromQuery] string? patientLastName)
     {
         var appointments = new List<AppointmentListDto>();
 
@@ -29,19 +33,28 @@ public class AppointmentsController : ControllerBase
         await connection.OpenAsync();
 
         const string sql = @"
-        SELECT
-            a.IdAppointment,
-            a.AppointmentDate,
-            a.Status,
-            a.Reason,
-            p.FirstName + N' ' + p.LastName AS PatientFullName,
-            p.Email AS PatientEmail
-        FROM dbo.Appointments a
-        JOIN dbo.Patients p ON p.IdPatient = a.IdPatient
-        ORDER BY a.AppointmentDate";
-
+            SELECT
+                a.IdAppointment,
+                a.AppointmentDate,
+                a.Status,
+                a.Reason,
+                p.FirstName + N' ' + p.LastName AS PatientFullName,
+                p.Email AS PatientEmail
+            FROM dbo.Appointments a
+            JOIN dbo.Patients p ON p.IdPatient = a.IdPatient
+            WHERE (@Status IS NULL OR a.Status = @Status)
+              AND (@PatientLastName IS NULL OR p.LastName = @PatientLastName)
+            ORDER BY a.AppointmentDate";
+        
+        
         await using var command =
             new SqlCommand(sql, connection);
+        
+        command.Parameters.Add("@Status", SqlDbType.NVarChar, 30)
+            .Value = (object?)status ?? DBNull.Value;
+
+        command.Parameters.Add("@PatientLastName", SqlDbType.NVarChar, 80)
+            .Value = (object?)patientLastName ?? DBNull.Value;
 
         await using var reader =
             await command.ExecuteReaderAsync();
