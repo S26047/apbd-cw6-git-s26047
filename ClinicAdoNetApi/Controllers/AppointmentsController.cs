@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace ClinicAdoNetApi.Controllers;
 
@@ -14,11 +15,23 @@ public class AppointmentsController : ControllerBase
     }
 
     [HttpGet]
-    public IActionResult Get()
+    public async Task<IActionResult> Get()
     {
         var connectionString =
             _configuration.GetConnectionString("DefaultConnection");
 
-        return Ok(connectionString);
+        try
+        {
+            await using var connection =
+                new SqlConnection(connectionString);
+
+            await connection.OpenAsync();
+
+            return Ok("Database connection successful");
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }
